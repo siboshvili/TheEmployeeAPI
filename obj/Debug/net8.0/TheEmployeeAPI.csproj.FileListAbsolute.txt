@@ -33,3 +33,4 @@
 /Users/andriasiboshvili/Desktop/TheEmployeeAPI/obj/Debug/net8.0/ref/TheEmployeeAPI.dll
 /Users/andriasiboshvili/Desktop/TheEmployeeAPI/bin/Debug/net8.0/FluentValidation.dll
 /Users/andriasiboshvili/Desktop/TheEmployeeAPI/bin/Debug/net8.0/FluentValidation.DependencyInjectionExtensions.dll
+/Users/andriasiboshvili/Desktop/TheEmployeeAPI/obj/Debug/net8.0/TheEmployeeAPI.sourcelink.json
