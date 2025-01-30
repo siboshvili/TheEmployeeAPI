@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using TheEmployeeAPI;
+using static Employee;
 
 public class EmployeesController : BaseController
 {
@@ -16,45 +17,21 @@ public class EmployeesController : BaseController
     [HttpGet]
     public IActionResult GetAllEmployees()
     {
-        var employees = _repository.GetAll().Select(employee => new GetEmployeeResponse
-        {
-            FirstName = employee.FirstName,
-            LastName = employee.LastName,
-            Address1 = employee.Address1,
-            Address2 = employee.Address2,
-            City = employee.City,
-            State = employee.State,
-            ZipCode = employee.ZipCode,
-            PhoneNumber = employee.PhoneNumber,
-            Email = employee.Email
-        });
+        var employees = _repository.GetAll().Select(EmployeeToGetEmployeeResponse);
 
         return Ok(employees);
     }
 
-    [HttpGet("{id:int}")]
-    public IActionResult GetEmployeeById(int id)
+    [HttpGet("{employeeId}/benefits")]
+    public IActionResult GetEmployeeById(int employeeId)
     {
-        var employee = _repository.GetById(id);
+        var employee = _repository.GetById(employeeId);
         if (employee == null)
         {
             return NotFound();
         }
+        return Ok(employee.Benefits.Select(BenefitToBenefitResponse));
 
-        var employeeResponse = new GetEmployeeResponse
-        {
-            FirstName = employee.FirstName,
-            LastName = employee.LastName,
-            Address1 = employee.Address1,
-            Address2 = employee.Address2,
-            City = employee.City,
-            State = employee.State,
-            ZipCode = employee.ZipCode,
-            PhoneNumber = employee.PhoneNumber,
-            Email = employee.Email
-        };
-
-        return Ok(employeeResponse);
     }
 
     [HttpPost]
@@ -77,7 +54,8 @@ public class EmployeesController : BaseController
             State = employeeRequest.State,
             ZipCode = employeeRequest.ZipCode,
             PhoneNumber = employeeRequest.PhoneNumber,
-            Email = employeeRequest.Email
+            Email = employeeRequest.Email,
+
         };
 
         _repository.Create(newEmployee);
@@ -117,4 +95,34 @@ public class EmployeesController : BaseController
             return StatusCode(500, "An error occurred while updating the employee");
         }
     }
+
+    private static GetEmployeeResponse EmployeeToGetEmployeeResponse(Employee employee)
+    {
+        return new GetEmployeeResponse
+        {
+            FirstName = employee.FirstName,
+            LastName = employee.LastName,
+            Address1 = employee.Address1,
+            Address2 = employee.Address2,
+            City = employee.City,
+            State = employee.State,
+            ZipCode = employee.ZipCode,
+            PhoneNumber = employee.PhoneNumber,
+            Email = employee.Email,
+            Benefits = employee.Benefits.Select(BenefitToBenefitResponse).ToList()
+        };
+    }
+
+    private static GetEmployeeResponseEmployeeBenefit BenefitToBenefitResponse(EmployeeBenefits benefit)
+    {
+        return new GetEmployeeResponseEmployeeBenefit
+        {
+            Id = benefit.Id,
+            EmployeeId = benefit.EmployeeId,
+            BenefitType = benefit.BenefitType,
+            Cost = benefit.Cost
+        };
+
+    }
 }
+
