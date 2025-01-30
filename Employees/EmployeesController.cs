@@ -1,47 +1,63 @@
-using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
-using TheEmployeeAPI;
-using static Employee;
+using Microsoft.EntityFrameworkCore;
 
 public class EmployeesController : BaseController
 {
-    private readonly IRepository<Employee> _repository;
+    private readonly AppDbContext _dbContext;
     private readonly ILogger<EmployeesController> _logger;
 
-    public EmployeesController(IRepository<Employee> repository, ILogger<EmployeesController> logger)
+    public EmployeesController(AppDbContext dbContext, ILogger<EmployeesController> logger)
     {
-        _repository = repository;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
     [HttpGet]
-    public IActionResult GetAllEmployees()
+    public async Task<IActionResult> GetAllEmployees([FromQuery] GetAllEmployeesRequest request)
     {
-        var employees = _repository.GetAll().Select(EmployeeToGetEmployeeResponse);
+        int page = request?.Page ?? 1;
+        int numberOfRecords = request?.RecordsPerPage ?? 100;
 
-        return Ok(employees);
+        IQueryable<Employee> query = _dbContext.Employees
+            .Include(e => e.Benefits)
+            .Skip((page - 1) * numberOfRecords)
+            .Take(numberOfRecords);
+
+        if (request != null)
+        {
+            if (!string.IsNullOrWhiteSpace(request.FirstNameContains))
+            {
+                query = query.Where(e => e.FirstName.Contains(request.FirstNameContains));
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.LastNameContains))
+            {
+                query = query.Where(e => e.LastName.Contains(request.LastNameContains));
+            }
+        }
+
+        var employees = await query.ToArrayAsync();
+
+        return Ok(employees.Select(EmployeeToGetEmployeeResponse));
+
     }
 
-    [HttpGet("{employeeId}/benefits")]
-    public IActionResult GetEmployeeById(int employeeId)
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetEmployeeById(int id)
     {
-        var employee = _repository.GetById(employeeId);
+        var employee = await _dbContext.Employees.SingleOrDefaultAsync(e => e.Id == id);
         if (employee == null)
         {
             return NotFound();
         }
-        return Ok(employee.Benefits.Select(BenefitToBenefitResponse));
 
+        var employeeResponse = EmployeeToGetEmployeeResponse(employee);
+        return Ok(employeeResponse);
     }
 
     [HttpPost]
     public async Task<IActionResult> CreateEmployee([FromBody] CreateEmployeeRequest employeeRequest)
     {
-        var validationResults = await ValidateAsync(employeeRequest);
-        if (!validationResults.IsValid)
-        {
-            return ValidationProblem(validationResults.ToModelStateDictionary());
-        }
 
         var newEmployee = new Employee
         {
@@ -54,20 +70,21 @@ public class EmployeesController : BaseController
             State = employeeRequest.State,
             ZipCode = employeeRequest.ZipCode,
             PhoneNumber = employeeRequest.PhoneNumber,
-            Email = employeeRequest.Email,
-
+            Email = employeeRequest.Email
         };
 
-        _repository.Create(newEmployee);
+        _dbContext.Employees.Add(newEmployee);
+        await _dbContext.SaveChangesAsync();
+
         return CreatedAtAction(nameof(GetEmployeeById), new { id = newEmployee.Id }, newEmployee);
     }
 
     [HttpPut("{id}")]
-    public IActionResult UpdateEmployee(int id, [FromBody] UpdateEmployeeRequest employeeRequest)
+    public async Task<IActionResult> UpdateEmployee(int id, [FromBody] UpdateEmployeeRequest employeeRequest)
     {
         _logger.LogInformation("Updating employee with ID: {EmployeeId}", id);
 
-        var existingEmployee = _repository.GetById(id);
+        var existingEmployee = await _dbContext.Employees.FindAsync(id);
         if (existingEmployee == null)
         {
             _logger.LogWarning("Employee with ID: {EmployeeId} not found", id);
@@ -85,7 +102,7 @@ public class EmployeesController : BaseController
 
         try
         {
-            _repository.Update(existingEmployee);
+            await _dbContext.SaveChangesAsync();
             _logger.LogInformation("Employee with ID: {EmployeeId} successfully updated", id);
             return Ok(existingEmployee);
         }
@@ -94,6 +111,46 @@ public class EmployeesController : BaseController
             _logger.LogError(ex, "Error occurred while updating employee with ID: {EmployeeId}", id);
             return StatusCode(500, "An error occurred while updating the employee");
         }
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteEmployee(int id)
+    {
+        var employee = await _dbContext.Employees.FindAsync(id);
+
+        if (employee == null)
+        {
+            return NotFound();
+        }
+
+        _dbContext.Employees.Remove(employee);
+        await _dbContext.SaveChangesAsync();
+
+        return NoContent();
+    }
+
+    [HttpGet("{employeeId}/benefits")]
+    public async Task<IActionResult> GetBenefitsForEmployee(int employeeId)
+    {
+        var employee = await _dbContext.Employees
+            .Include(e => e.Benefits)
+            .ThenInclude(e => e.Benefit)
+            .SingleOrDefaultAsync(e => e.Id == employeeId);
+
+        if (employee == null)
+        {
+            return NotFound();
+        }
+
+        var benefits = employee.Benefits.Select(b => new GetEmployeeResponseEmployeeBenefit
+        {
+            Id = b.Id,
+            Name = b.Benefit.Name,
+            Description = b.Benefit.Description,
+            Cost = b.CostToEmployee ?? b.Benefit.BaseCost
+        });
+
+        return Ok(benefits);
     }
 
     private static GetEmployeeResponse EmployeeToGetEmployeeResponse(Employee employee)
@@ -108,21 +165,8 @@ public class EmployeesController : BaseController
             State = employee.State,
             ZipCode = employee.ZipCode,
             PhoneNumber = employee.PhoneNumber,
-            Email = employee.Email,
-            Benefits = employee.Benefits.Select(BenefitToBenefitResponse).ToList()
+            Email = employee.Email
         };
-    }
-
-    private static GetEmployeeResponseEmployeeBenefit BenefitToBenefitResponse(EmployeeBenefits benefit)
-    {
-        return new GetEmployeeResponseEmployeeBenefit
-        {
-            Id = benefit.Id,
-            EmployeeId = benefit.EmployeeId,
-            BenefitType = benefit.BenefitType,
-            Cost = benefit.Cost
-        };
-
     }
 }
 

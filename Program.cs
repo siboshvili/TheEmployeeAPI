@@ -1,7 +1,6 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -14,14 +13,17 @@ builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 builder.Services.AddControllers();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    {
+        options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"));
+        options.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+    });
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
-    SeedData.Seed(services);
+    SeedData.MigrateAndSeed(services);
 }
 
 // Configure the HTTP request pipeline.
